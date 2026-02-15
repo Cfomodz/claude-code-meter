@@ -4,8 +4,6 @@ A macOS desktop widget that shows your Claude Code usage limits in real time. Bu
 
 Displays both the **5-hour rolling window** and **7-day rolling window** with progress bars, percentage, exact reset time, and countdown timer.
 
-![Claude Code Meter widget](screenshot.png)
-
 ## Requirements
 
 - macOS 12+
