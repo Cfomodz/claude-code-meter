@@ -1,87 +1,82 @@
 # Claude Code Meter
 
-A macOS desktop widget that shows your Claude Code usage limits in real time. Built for [Ubersicht](https://tracesof.net/uebersicht/).
+A physical desk meter that displays your Anthropic Claude API usage costs in real-time on a MAX7219 LED dot matrix, powered by an ESP32.
 
-Displays both the **5-hour rolling window** and **7-day rolling window** with progress bars, percentage, exact reset time, and countdown timer.
+## How It Works
 
-## Requirements
-
-- macOS 12+
-- [Ubersicht](https://tracesof.net/uebersicht/) (free, open source)
-- An active Claude Pro or Max subscription with Claude Code authenticated
-
-## Installation
-
-1. Install Ubersicht if you don't have it:
-
-   ```bash
-   brew install --cask ubersicht
-   ```
-
-2. Download `claude-code-meter.jsx` into your Ubersicht widgets folder:
-
-   ```bash
-   curl -o "$HOME/Library/Application Support/Übersicht/widgets/claude-code-meter.jsx" \
-     https://raw.githubusercontent.com/gxjansen/claude-code-meter/main/claude-code-meter.jsx
-   ```
-
-3. Launch Ubersicht (or it will pick up the file automatically if already running).
-
-The widget reads your OAuth token from the macOS Keychain (stored there by Claude Code during `claude auth`). No manual token configuration needed.
-
-## Usage
-
-### Display modes
-
-The widget supports two display modes:
-
-- **Remaining** -- shows how much capacity is LEFT (bucket draining). Bars go from green (plenty) to amber (getting low) to red (nearly empty).
-
-  ![Remaining mode](screenshot.png)
-
-- **Used** -- shows how much capacity is CONSUMED (counter filling). Bars go from amber (normal) to red (nearly full).
-
-  ![Used mode](screenshot-used.png)
-
-**Click the mode badge** in the top-right corner of the widget header to toggle between modes. The label next to each percentage (`left` / `used`) always clarifies what the number means.
-
-### Settings
-
-Open `claude-code-meter.jsx` in a text editor to change defaults at the top of the file:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `DEFAULT_MODE` | `"remaining"` | Starting display mode (`"remaining"` or `"used"`) |
-| `REFRESH_MS` | `30000` | API poll interval in milliseconds |
-
-### Position
-
-Change the `className` export to reposition the widget:
-
-```js
-export const className = {
-  bottom: "20px",  // distance from bottom
-  right: "20px",   // distance from right
-  width: "280px",
-};
+```
+ESP32 + MAX7219  ◄── HTTPS poll ──  n8n Webhook  ── Admin API ──►  Anthropic
+ (desk display)                     (middleware)                   (usage data)
 ```
 
-## How it works
+The ESP32 polls an n8n webhook at a configurable interval (default 60s). The n8n workflow calls the Anthropic Admin API, computes cost from token counts, and returns a lightweight JSON payload. The ESP32 parses it and renders the cost (or token count) on the LED matrix.
 
-The widget pulls usage data from Anthropic's servers via their OAuth usage API (`https://api.anthropic.com/api/oauth/usage`). It does **not** track local sessions or count tokens client-side -- it reads the same server-side utilization percentages that Anthropic calculates across all your Claude Code activity. The OAuth token stored in your macOS Keychain by `claude auth` is used to authenticate the request.
+The device **never stores your API key** — credentials are managed entirely by the n8n middleware layer.
 
-The API returns utilization percentages and reset timestamps for both the 5-hour and 7-day rolling windows.
+## Hardware
 
-No data leaves your machine beyond the API call to Anthropic's servers (the same call Claude Code itself makes).
+| Component | Spec |
+|-----------|------|
+| MCU | ESP32-S3-DevKitC-1 or ESP32-WROOM-32 |
+| Display | MAX7219 4-in-1 Dot Matrix (FC-16) |
+| Level Shifter | 74HCT125 (3.3V → 5.0V for SPI) |
+| Power | USB-C, 5V/2A with 1000µF bulk cap |
 
-## Troubleshooting
+Full BOM, wiring diagram, enclosure specs, and n8n workflow setup are in [`firmware/HARDWARE.md`](firmware/HARDWARE.md).
 
-| Problem | Solution |
-|---------|----------|
-| "Auth failed" error | Run `claude auth` in your terminal to refresh credentials |
-| Widget not appearing | Grant Ubersicht screen recording permission in System Settings > Privacy & Security |
-| "Loading..." stuck | Check that `security find-generic-password -s "Claude Code-credentials" -w` returns valid JSON |
-| Stale countdown | The timer updates every 30s (on each API refresh), not every second |
+## Firmware
+
+Built with PlatformIO and Arduino framework.
+
+### Dependencies
+
+- **ArduinoJson** v7+ — stream-filtered JSON parsing
+- **MD_Parola** — text animation on MAX7219
+- **MD_MAX72XX** — hardware driver
+- **WiFiManager** — captive portal provisioning
+
+### Build & Flash
+
+```bash
+cd firmware
+
+# ESP32-S3
+pio run -e esp32s3 -t upload
+
+# ESP32-WROOM-32
+pio run -e esp32dev -t upload
+
+# Serial monitor
+pio device monitor -b 115200
+```
+
+## First Boot
+
+1. Power on — display shows `CLAUDE` → `METER` → `WiFi`
+2. Connect to the **ClaudeMeter_Setup** WiFi AP from your phone/laptop
+3. Enter your WiFi credentials and n8n webhook URL in the captive portal
+4. Device connects and begins polling
+
+## Display Modes
+
+- **Cost** — shows `$XX.XX` on the display (default)
+- **Tokens** — shows total token count with K/M/B suffix
+
+Mode is set during provisioning and stored persistently.
+
+## Error Codes
+
+| Display | Meaning |
+|---------|---------|
+| `E-WIFI` | WiFi disconnected |
+| `E-TLS` | TLS handshake failed |
+| `E-API` | 401/403 from upstream API |
+| `E-JSON` | JSON parse error |
+| `E-HTTP` | Non-200 HTTP response |
+
+## Factory Reset
+
+Hold the **BOOT** button (GPIO 0) for 5 seconds to clear all stored config and restart.
 
 ## License
 
