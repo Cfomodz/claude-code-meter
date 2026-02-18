@@ -130,8 +130,8 @@ PollResult NetworkManager::poll() {
         }
     } else {
         // Allow HTTP for local n8n instances on trusted networks
-        WiFiClient plainClient;
-        if (!https.begin(plainClient, _webhookUrl)) {
+        // Use member variable to persist client for duration of request
+        if (!https.begin(_plainClient, _webhookUrl)) {
             result.errorMsg = ERR_HTTP;
             return result;
         }
@@ -181,6 +181,9 @@ void NetworkManager::_saveConfigCallback() {
     if (_instance) {
         _instance->_webhookUrl = _instance->_paramWebhook->getValue();
         _instance->_displayMode = _instance->_paramMode->getValue();
+
+        // Refresh TLS settings in case the new URL requires a different CA
+        _instance->_setupTLS();
 
         // Validate display mode
         if (_instance->_displayMode != "cost" && _instance->_displayMode != "tokens") {

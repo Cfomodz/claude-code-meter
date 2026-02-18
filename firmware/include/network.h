@@ -59,6 +59,7 @@ private:
     WiFiManager _wifiManager;
     Preferences _preferences;
     WiFiClientSecure _secureClient;
+    WiFiClient _plainClient;
 
     String _webhookUrl;
     String _displayMode;
